@@ -1,38 +1,40 @@
 import librosa
 import numpy as np
+import json
+import tensorflow as tf
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.neural_network import MLPRegressor
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 from sklearn.metrics import mean_squared_error
-import json
 
 song_paths = [
-    "/songs/song1.mp3", "/songs/song2.mp3", "/songs/song3.mp3", "/songs/song4.mp3", 
-    "/songs/song5.mp3", "/songs/song6.mp3", "/songs/song7.mp3", "/songs/song8.mp3",
-    "/songs/song9.mp3", "/songs/song10.mp3", "/songs/song11.mp3", "/songs/song12.mp3",
-    "/songs/song13.mp3", "/songs/song14.mp3", "/songs/song15.mp3", "/songs/song16.mp3",
-    "/songs/song17.mp3", "/songs/song18.mp3", "/songs/song19.mp3", "/songs/song20.mp3",
-    "/songs/song21.mp3", "/songs/song22.mp3", "/songs/song23.mp3", "/songs/song24.mp3",
-    "/songs/song25.mp3", "/songs/song26.mp3", "/songs/song27.mp3", "/songs/song28.mp3",
-    "/songs/song29.mp3", "/songs/song30.mp3", "/songs/song31.mp3", "/songs/song32.mp3",
-    "/songs/song33.mp3", "/songs/song34.mp3", "/songs/song35.mp3", "/songs/song36.mp3",
-    "/songs/song37.mp3", "/songs/song38.mp3", "/songs/song39.mp3", "/songs/song40.mp3",
-    "/songs/song41.mp3", "/songs/song42.mp3", "/songs/song43.mp3", "/songs/song44.mp3",
-    "/songs/song45.mp3", "/songs/song46.mp3", "/songs/song47.mp3", "/songs/song48.mp3",
-    "/songs/song49.mp3", "/songs/song50.mp3", "/songs/song51.mp3", "/songs/song52.mp3",
-    "/songs/song53.mp3", "/songs/song54.mp3", "/songs/song55.mp3", "/songs/song56.mp3",
-    "/songs/song57.mp3", "/songs/song58.mp3", "/songs/song59.mp3", "/songs/song60.mp3"
+    "songs/song1.mp3", "songs/song2.mp3", "songs/song3.mp3", "songs/song4.mp3", 
+    "songs/song5.mp3", "songs/song6.mp3", "songs/song7.mp3", "songs/song8.mp3",
+    "songs/song9.mp3", "songs/song10.mp3", "songs/song11.mp3", "songs/song12.mp3",
+    "songs/song13.mp3", "songs/song14.mp3", "songs/song15.mp3", "songs/song16.mp3",
+    "songs/song17.mp3", "songs/song18.mp3", "songs/song19.mp3", "songs/song20.mp3",
+    "songs/song21.mp3", "songs/song22.mp3", "songs/song23.mp3", "songs/song24.mp3",
+    "songs/song25.mp3", "songs/song26.mp3", "songs/song27.mp3", "songs/song28.mp3",
+    "songs/song29.mp3", "songs/song30.mp3", "songs/song31.mp3", "songs/song32.mp3",
+    "songs/song33.mp3", "songs/song34.mp3", "songs/song35.mp3", "songs/song36.mp3",
+    "songs/song37.mp3", "songs/song38.mp3", "songs/song39.mp3", "songs/song40.mp3",
+    "songs/song41.mp3", "songs/song42.mp3", "songs/song43.mp3", "songs/song44.mp3",
+    "songs/song45.mp3", "songs/song46.mp3", "songs/song47.mp3", "songs/song48.mp3",
+    "songs/song49.mp3", "songs/song50.mp3", "songs/song51.mp3", "songs/song52.mp3",
+    "songs/song53.mp3", "songs/song54.mp3", "songs/song55.mp3", "songs/song56.mp3",
+    "songs/song57.mp3", "songs/song58.mp3", "songs/song59.mp3", "songs/song60.mp3"
 ]
 
 # Function to load ratings from a JSON file
 def load_ratings_from_json(file_path):
     with open(file_path, 'r') as file:
         data = json.load(file)
-        ratings = sum(data['song_ratings'], [])
+        ratings = data['song_ratings']
     return ratings
 
-# Load the ratings
-chill_to_crazy_ratings = load_ratings_from_json('/songratings.json')
+chill_to_crazy_ratings = load_ratings_from_json('songratings.json')
 
 # Function to extract MFCC features from an MP3 song
 def extract_features(song_path):
@@ -52,27 +54,40 @@ for path in song_paths:
     if mfccs is not None:
         features.append(mfccs)
 
-# Ensure the features and labels have the same length
 if len(features) != len(chill_to_crazy_ratings):
     raise ValueError("The number of features and labels must be the same.")
 
-# Convert to numpy arrays
 X = np.array(features)
 y = np.array(chill_to_crazy_ratings)
 
-# Split the dataset into training and testing sets
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
 
-# Normalize the features
 scaler = StandardScaler()
 X_train = scaler.fit_transform(X_train)
 X_test = scaler.transform(X_test)
 
-# Define and train the model
-model = MLPRegressor(hidden_layer_sizes=(100,), max_iter=500)
-model.fit(X_train, y_train)
+model = Sequential()
+model.add(Dense(128, activation='relu', input_shape=(X_train.shape[1],)))
+model.add(Dropout(0.5))
+model.add(Dense(64, activation='relu'))
+model.add(Dropout(0.5))
+model.add(Dense(1, activation='linear'))
 
-# Predict and evaluate the model
+model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.001), loss='mean_squared_error')
+
+early_stopping = EarlyStopping(monitor='val_loss', patience=20, restore_best_weights=True)
+model_checkpoint = ModelCheckpoint('modelweights.h5', monitor='val_loss', save_best_only=True)
+reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=0.0001)
+
+history = model.fit(
+    X_train, y_train,
+    epochs=500,
+    validation_split=0.2,
+    callbacks=[early_stopping, model_checkpoint, reduce_lr]
+)
+
+model = tf.keras.models.load_model('best_model.h5')
+
 predictions = model.predict(X_test)
 mse = mean_squared_error(y_test, predictions)
 print(f"Mean Squared Error: {mse}")
