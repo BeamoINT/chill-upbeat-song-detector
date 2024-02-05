@@ -2,8 +2,12 @@ import librosa
 import numpy as np
 import tensorflow as tf
 from joblib import load
+import os
 
-model = tf.keras.models.load_model('modelweights.h5')
+ai_model_dir = 'AI-Model'
+
+model_path = os.path.join(ai_model_dir, 'modelweights.h5')
+model = tf.keras.models.load_model(model_path)
 
 def extract_features(song_path):
     audio, sample_rate = librosa.load(song_path, res_type='kaiser_fast')
@@ -11,7 +15,8 @@ def extract_features(song_path):
     mfccs_processed = np.mean(mfccs.T, axis=0)
     return mfccs_processed
 
-scaler = load('scaler.save')
+scaler_path = os.path.join(ai_model_dir, 'scaler.save')
+scaler = load(scaler_path)
 
 song_path = 'test.mp3'
 

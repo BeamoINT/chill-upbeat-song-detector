@@ -9,6 +9,7 @@ from tensorflow.keras.layers import Dense, Dropout
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 from sklearn.metrics import mean_squared_error
 from joblib import dump
+import os
 
 song_paths = [
     "songs/song1.mp3", "songs/song2.mp3", "songs/song3.mp3", "songs/song4.mp3", 
@@ -64,7 +65,11 @@ scaler = StandardScaler()
 X_train = scaler.fit_transform(X_train)
 X_test = scaler.transform(X_test)
 
-dump(scaler, 'scaler.save')
+ai_model_dir = 'AI-Model'
+os.makedirs(ai_model_dir, exist_ok=True)
+
+scaler_file_path = os.path.join(ai_model_dir, 'scaler.save')
+dump(scaler, scaler_file_path)
 
 model = Sequential()
 model.add(Dense(256, activation='relu', input_shape=(X_train.shape[1],), kernel_regularizer=tf.keras.regularizers.l2(0.001)))
@@ -78,8 +83,10 @@ model.add(Dense(1, activation='linear'))
 optimizer = tf.keras.optimizers.Adam(learning_rate=0.0005)
 model.compile(optimizer=optimizer, loss='mean_squared_error')
 
+model_checkpoint_path = os.path.join(ai_model_dir, 'modelweights.h5')
+model_checkpoint = ModelCheckpoint(model_checkpoint_path, monitor='val_loss', save_best_only=True)
+
 early_stopping = EarlyStopping(monitor='val_loss', patience=40, restore_best_weights=True)
-model_checkpoint = ModelCheckpoint('modelweights.h5', monitor='val_loss', save_best_only=True)
 reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=10, min_lr=0.00001)
 
 history = model.fit(
@@ -89,7 +96,7 @@ history = model.fit(
     callbacks=[early_stopping, model_checkpoint, reduce_lr]
 )
 
-model = tf.keras.models.load_model('modelweights.h5')
+model = tf.keras.models.load_model(model_checkpoint_path)
 
 predictions = model.predict(X_test)
 mse = mean_squared_error(y_test, predictions)
