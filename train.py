@@ -8,6 +8,7 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 from sklearn.metrics import mean_squared_error
+from joblib import dump
 
 song_paths = [
     "songs/song1.mp3", "songs/song2.mp3", "songs/song3.mp3", "songs/song4.mp3", 
@@ -27,7 +28,6 @@ song_paths = [
     "songs/song57.mp3", "songs/song58.mp3", "songs/song59.mp3", "songs/song60.mp3"
 ]
 
-# Function to load ratings from a JSON file
 def load_ratings_from_json(file_path):
     with open(file_path, 'r') as file:
         data = json.load(file)
@@ -36,18 +36,16 @@ def load_ratings_from_json(file_path):
 
 chill_to_crazy_ratings = load_ratings_from_json('songratings.json')
 
-# Function to extract MFCC features from an MP3 song
 def extract_features(song_path):
     try:
-        audio, sample_rate = librosa.load(song_path, res_type='kaiser_fast') 
+        audio, sample_rate = librosa.load(song_path, res_type='kaiser_fast')
         mfccs = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=40)
         mfccs_processed = np.mean(mfccs.T, axis=0)
     except Exception as e:
         print("Error encountered while parsing file: ", song_path, "\nError: ", e)
-        return None 
+        return None
     return mfccs_processed
 
-# Extract features from each song
 features = []
 for path in song_paths:
     mfccs = extract_features(path)
@@ -66,27 +64,32 @@ scaler = StandardScaler()
 X_train = scaler.fit_transform(X_train)
 X_test = scaler.transform(X_test)
 
+dump(scaler, 'scaler.save')
+
 model = Sequential()
-model.add(Dense(128, activation='relu', input_shape=(X_train.shape[1],)))
-model.add(Dropout(0.5))
-model.add(Dense(64, activation='relu'))
-model.add(Dropout(0.5))
+model.add(Dense(256, activation='relu', input_shape=(X_train.shape[1],), kernel_regularizer=tf.keras.regularizers.l2(0.001)))
+model.add(Dropout(0.3))
+model.add(Dense(128, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.001)))
+model.add(Dropout(0.3))
+model.add(Dense(64, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.001)))
+model.add(Dropout(0.3))
 model.add(Dense(1, activation='linear'))
 
-model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.001), loss='mean_squared_error')
+optimizer = tf.keras.optimizers.Adam(learning_rate=0.0005)
+model.compile(optimizer=optimizer, loss='mean_squared_error')
 
-early_stopping = EarlyStopping(monitor='val_loss', patience=20, restore_best_weights=True)
+early_stopping = EarlyStopping(monitor='val_loss', patience=40, restore_best_weights=True)
 model_checkpoint = ModelCheckpoint('modelweights.h5', monitor='val_loss', save_best_only=True)
-reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=0.0001)
+reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=10, min_lr=0.00001)
 
 history = model.fit(
     X_train, y_train,
-    epochs=500,
+    epochs=1000,
     validation_split=0.2,
     callbacks=[early_stopping, model_checkpoint, reduce_lr]
 )
 
-model = tf.keras.models.load_model('best_model.h5')
+model = tf.keras.models.load_model('modelweights.h5')
 
 predictions = model.predict(X_test)
 mse = mean_squared_error(y_test, predictions)
